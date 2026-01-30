@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         initEventListeners();
         initRouter();
         document.getElementById('convertSection').style.display = 'block';
+        const migrateLink = document.getElementById('migrateLink');
+        if (migrateLink) migrateLink.style.display = 'none'; // 服务器模式下不显示「迁移到服务器」
         const me = await fetchMe();
         appState.isCreator = me.isCreator;
         appState.visitorId = me.visitorId;
