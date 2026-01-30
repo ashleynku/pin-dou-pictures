@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拼豆图(像素画)集合</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部标题 -->
+        <header class="header">
+            <h1>拼豆图(像素画)集合</h1>
+        </header>
+
+        <!-- 搜索区 -->
+        <section class="search-section">
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="搜索关键词（文件名、描述）..." class="search-input">
+            </div>
+            <div class="tags-container">
+                <div class="tags-label">标签筛选：</div>
+                <div class="tags-list" id="tagsList">
+                    <!-- 标签按钮将动态生成 -->
+                </div>
+                <button class="add-tag-btn" id="addTagBtn">+ 新建标签</button>
+            </div>
+        </section>
+
+        <!-- 上传区和转换区 -->
+        <section class="upload-convert-section">
+            <!-- 上传区 -->
+            <div class="upload-section">
+                <h2>图片上传</h2>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-placeholder">
+                        <p>拖拽图片到此处或点击选择</p>
+                        <input type="file" id="fileInput" accept="image/*" multiple style="display: none;">
+                    </div>
+                    <div class="upload-preview" id="uploadPreview"></div>
+                </div>
+                <div class="upload-form" id="uploadForm" style="display: none;">
+                    <div class="form-group">
+                        <label>标签（逗号分隔）：</label>
+                        <input type="text" id="tagsInput" placeholder="例如：可爱,动物">
+                    </div>
+                    <div class="form-group">
+                        <label>关键词描述（逗号分隔）：</label>
+                        <input type="text" id="keywordsInput" placeholder="例如：小猫,萌宠">
+                    </div>
+                    <button class="submit-btn" id="submitBtn">上传</button>
+                </div>
+            </div>
+
+            <!-- 像素画转换区 -->
+            <div class="convert-section" id="convertSection">
+                <h2>像素画转换</h2>
+                <div class="convert-upload-area" id="convertUploadArea">
+                    <p>拖拽图片到此处或点击选择</p>
+                    <input type="file" id="convertFileInput" accept="image/*" style="display: none;">
+                </div>
+                <button class="convert-btn" id="convertBtn" style="display: none;">转为像素画</button>
+                <div class="convert-preview" id="convertPreview" style="display: none;">
+                    <div class="convert-original">
+                        <p>原图</p>
+                        <canvas id="originalCanvas"></canvas>
+                    </div>
+                    <div class="convert-pixel">
+                        <p>像素图</p>
+                        <canvas id="pixelCanvas"></canvas>
+                        <div class="convert-actions" id="convertActions" style="display: none;">
+                            <button class="confirm-convert-btn" id="confirmConvertBtn">确认无误</button>
+                            <button class="save-pixel-btn" id="savePixelBtn" style="display: none;">保存像素图</button>
+                            <button class="upload-to-gallery-btn" id="uploadToGalleryBtn" style="display: none;">上传至图库</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 图库 -->
+        <section class="gallery-section">
+            <div class="gallery-header">
+                <div class="gallery-header-left">
+                    <h2>图库</h2>
+                    <span class="gallery-count" id="galleryCount">共 0 张</span>
+                </div>
+                <div class="gallery-header-actions">
+                    <button type="button" class="creator-login-btn" id="creatorSettingsBtn" style="display: none;">创作者登录</button>
+                    <button type="button" class="creator-logout-link" id="creatorLogoutLink" style="display: none;">退出创作者</button>
+                    <a href="migrate-to-server.html" class="migrate-link" id="migrateLink" style="display: none;">迁移到服务器</a>
+                    <button class="select-mode-btn" id="selectModeBtn">选择</button>
+                </div>
+            </div>
+            <div class="gallery-grid" id="galleryGrid">
+                <!-- 图片将动态生成 -->
+            </div>
+            <div class="selection-bar" id="selectionBar" style="display: none;">
+                <span class="selected-count" id="selectedCount">已选择 0 项</span>
+                <button class="action-btn delete-btn" id="deleteSelectedBtn">删除</button>
+                <button class="action-btn download-btn" id="downloadSelectedBtn">下载到本地</button>
+                <button class="action-btn cancel-btn" id="cancelSelectBtn">取消</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- 新建标签对话框 -->
+    <div class="modal" id="tagModal" style="display: none;">
+        <div class="modal-content">
+            <h3>新建标签</h3>
+            <input type="text" id="newTagInput" placeholder="输入标签名称">
+            <div class="modal-buttons">
+                <button class="modal-btn confirm-btn" id="confirmTagBtn">确认</button>
+                <button class="modal-btn cancel-modal-btn" id="cancelTagBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创作者设置对话框 -->
+    <div class="modal" id="creatorModal" style="display: none;">
+        <div class="modal-content">
+            <h3>创作者身份</h3>
+            <p class="creator-hint">输入您部署时设置的创作者密钥，即可获得图库的完全管理权限（修改/删除任意内容）。访客仅能删除自己上传的图片。</p>
+            <input type="password" id="creatorTokenInput" placeholder="请输入创作者密钥" autocomplete="off">
+            <div class="modal-buttons">
+                <button class="modal-btn confirm-btn" id="creatorConfirmBtn">确认</button>
+                <button class="modal-btn cancel-modal-btn" id="creatorCancelBtn">取消</button>
+                <button type="button" class="modal-btn cancel-modal-btn" id="creatorLogoutBtn" style="display: none;">退出创作者</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 图片详情页 -->
+    <div class="detail-page" id="detailPage" style="display: none;">
+        <div class="detail-container">
+            <button class="back-btn" id="backBtn">← 返回图库</button>
+            
+            <div class="detail-layout">
+                <!-- 图片展示区 -->
+                <div class="detail-image-section">
+                    <div class="detail-image-container" id="detailImageContainer">
+                        <img id="detailImage" src="" alt="">
+                    </div>
+                </div>
+                
+                <!-- 信息面板 -->
+                <div class="detail-info-section">
+                    <div class="detail-info-card">
+                        <h2 class="detail-info-title">图片信息</h2>
+                        
+                        <div class="detail-info-item">
+                            <label>图片名称：</label>
+                            <span id="detailName"></span>
+                        </div>
+                        
+                        <div class="detail-info-item">
+                            <label>标签类型：</label>
+                            <div class="detail-tags" id="detailTags"></div>
+                        </div>
+                        
+                        <div class="detail-info-item">
+                            <label>像素规格：</label>
+                            <span id="detailDimensions"></span>
+                        </div>
+                        
+                        <div class="detail-info-item">
+                            <label>文件格式：</label>
+                            <span id="detailFormat"></span>
+                        </div>
+                        
+                        <div class="detail-info-item">
+                            <label>文件大小：</label>
+                            <span id="detailSize"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
