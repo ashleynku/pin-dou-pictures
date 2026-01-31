@@ -38,11 +38,11 @@ const gradientColors = [
 document.addEventListener('DOMContentLoaded', async () => {
     // 显示加载提示
     showLoadingState();
-    // 非本地访问时一律隐藏「迁移到服务器」（分享给访客的网页不显示）
+    // 非本地访问时直接从 DOM 移除「迁移到服务器」，避免任何代码路径再显示
     const migrateLinkEl = document.getElementById('migrateLink');
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
     if (migrateLinkEl && !isLocal) {
-        migrateLinkEl.style.display = 'none';
+        migrateLinkEl.remove();
     }
     // 检查服务器连接
     const serverAvailable = await checkServerConnection();
@@ -53,8 +53,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         initEventListeners();
         initRouter();
         document.getElementById('convertSection').style.display = 'block';
-        const migrateLink = document.getElementById('migrateLink');
-        if (migrateLink) migrateLink.style.display = 'none'; // 服务器模式下不显示「迁移到服务器」
         const me = await fetchMe();
         appState.isCreator = me.isCreator;
         appState.visitorId = me.visitorId;
@@ -69,7 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             initRouter();
             document.getElementById('convertSection').style.display = 'block';
             await loadDataAndRender();
-            // 仅在本机 localhost 时显示「迁移到服务器」，访客打开的网页一律不显示
+            // 仅在本机 localhost 时显示「迁移到服务器」（非 localhost 时该元素已被 remove）
             const migrateLink = document.getElementById('migrateLink');
             if (migrateLink && isLocal) migrateLink.style.display = 'inline-block';
         }).catch(error => {
