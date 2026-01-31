@@ -38,7 +38,12 @@ const gradientColors = [
 document.addEventListener('DOMContentLoaded', async () => {
     // 显示加载提示
     showLoadingState();
-    
+    // 非本地访问时一律隐藏「迁移到服务器」（分享给访客的网页不显示）
+    const migrateLinkEl = document.getElementById('migrateLink');
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+    if (migrateLinkEl && !isLocal) {
+        migrateLinkEl.style.display = 'none';
+    }
     // 检查服务器连接
     const serverAvailable = await checkServerConnection();
     appState.useServer = serverAvailable;
@@ -64,9 +69,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             initRouter();
             document.getElementById('convertSection').style.display = 'block';
             await loadDataAndRender();
-            // 本地模式下显示「迁移到服务器」入口
+            // 仅在本机 localhost 时显示「迁移到服务器」，访客打开的网页一律不显示
             const migrateLink = document.getElementById('migrateLink');
-            if (migrateLink) migrateLink.style.display = 'inline-block';
+            if (migrateLink && isLocal) migrateLink.style.display = 'inline-block';
         }).catch(error => {
             console.error('数据库初始化失败:', error);
             hideLoadingState();
