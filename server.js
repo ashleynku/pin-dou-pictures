@@ -23,11 +23,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// 静态文件目录 - 提供前端文件
-app.use(express.static(path.join(__dirname, 'public')));
-// 如果没有public目录，使用当前目录
-app.use(express.static(__dirname));
-
 // 数据目录：支持环境变量 DATA_DIR 或 RAILWAY_VOLUME_MOUNT_PATH，便于挂载持久化卷
 const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
 const IMAGES_DIR = path.join(DATA_DIR, 'images');
@@ -324,6 +319,10 @@ app.put('/api/images/:id/complete', async (req, res) => {
         res.status(500).json({ error: '设置完成状态失败' });
     }
 });
+
+// 静态文件目录 - 放在 API 路由之后，确保 API 优先响应
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // 启动服务器
 async function startServer() {
