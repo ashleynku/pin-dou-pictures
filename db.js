@@ -282,6 +282,33 @@ async function getTags() {
     });
 }
 
+// 获取本地「已完成」图片 ID 列表
+async function getCompletedIds() {
+    if (!db) await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_TAGS], 'readonly');
+        const store = transaction.objectStore(STORE_TAGS);
+        const request = store.get('completedImageIds');
+        request.onsuccess = () => {
+            const val = request.result ? request.result.value : [];
+            resolve(Array.isArray(val) ? val : []);
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// 保存本地「已完成」图片 ID 列表
+async function saveCompletedIds(ids) {
+    if (!db) await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_TAGS], 'readwrite');
+        const store = transaction.objectStore(STORE_TAGS);
+        const request = store.put({ key: 'completedImageIds', value: ids });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
 // 迁移localStorage数据到IndexedDB
 async function migrateFromLocalStorage() {
     try {

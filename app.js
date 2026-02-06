@@ -11,10 +11,15 @@ const appState = {
     customTags: [],
     imageViewerZoom: 100,
     detailImageZoom: 100,
+    detailImagePan: { x: 0, y: 0 },
+    detailImageDragging: false,
+    detailImageDragStart: { x: 0, y: 0 },
     scrollPosition: 0,
     useServer: false,
     isCreator: false,   // 当前是否为创作者（仅服务器模式有效）
-    visitorId: null    // 当前访客 ID（仅服务器模式有效）
+    visitorId: null,    // 当前访客 ID（仅服务器模式有效）
+    completedImageIds: new Set(),   // 当前访客/本地已标记「已完成」的图片 ID
+    completionFilter: 'all'        // 图库筛选：'all' | 'completed' | 'uncompleted'
 };
 
 // 初始标签池
@@ -53,10 +58,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         initEventListeners();
         initRouter();
         document.getElementById('convertSection').style.display = 'block';
-        const me = await fetchMe();
+        const [me, _] = await Promise.all([fetchMe(), loadDataAndRender()]);
         appState.isCreator = me.isCreator;
         appState.visitorId = me.visitorId;
-        await loadDataAndRender();
         updateCreatorUI();
     } else {
         console.log('ℹ️ 未检测到服务器，使用本地模式');
@@ -78,24 +82,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// 加载数据并渲染（优化版本：先渲染标签再加载图库，缩短首屏可交互时间）
+// 加载数据并渲染（优化版本：标签与图库并行请求，首屏尽快出图）
 async function loadDataAndRender() {
     try {
         if (appState.useServer) {
-            // 服务器模式：先取标签并渲染，再取图库，减少等待感
-            appState.customTags = await fetchTags();
+            const [tags, images, completedIds] = await Promise.all([
+                fetchTags(),
+                fetchAllImages(),
+                fetchCompletedIds()
+            ]);
+            appState.customTags = tags;
+            appState.images = images;
+            appState.completedImageIds = new Set(completedIds.map(String));
             renderTags();
-            appState.images = await fetchAllImages();
+            hideLoadingState();
             renderGallery();
         } else {
-            // 本地模式
             appState.customTags = await getTags();
+            const completedIds = await getCompletedIds();
+            appState.completedImageIds = new Set(completedIds.map(String));
             renderTags();
             await loadImagesInBatches();
+            hideLoadingState();
             renderGallery();
         }
-        
-        hideLoadingState();
     } catch (error) {
         console.error('加载数据失败:', error);
         hideLoadingState();
@@ -106,7 +116,10 @@ async function loadDataAndRender() {
     }
 }
 
-// 分批加载图片（优化性能）
+// 首批出图数量：达到后立即渲染并隐藏加载态，缩短“图片出现”时间
+const INITIAL_BATCH_SIZE = 48;
+
+// 分批加载图片（首批到达即出图，其余后台追加）
 async function loadImagesInBatches() {
     if (!db) {
         await initDB();
@@ -119,7 +132,7 @@ async function loadImagesInBatches() {
         
         appState.images = [];
         let batch = [];
-        const BATCH_SIZE = 50; // 每批处理50张
+        let firstPaintDone = false;
         
         request.onsuccess = (event) => {
             const cursor = event.target.result;
@@ -127,26 +140,29 @@ async function loadImagesInBatches() {
             if (cursor) {
                 batch.push(cursor.value);
                 
-                // 当达到批次大小时，先渲染一批
-                if (batch.length >= BATCH_SIZE) {
+                // 首屏：达到 INITIAL_BATCH_SIZE 立即渲染并隐藏加载态
+                if (!firstPaintDone && batch.length >= INITIAL_BATCH_SIZE) {
                     appState.images.push(...batch);
-                    // 使用 requestIdleCallback 在浏览器空闲时渲染
-                    if (window.requestIdleCallback) {
-                        requestIdleCallback(() => {
-                            renderGallery();
-                        });
-                    } else {
-                        setTimeout(() => renderGallery(), 0);
-                    }
+                    firstPaintDone = true;
+                    hideLoadingState();
+                    renderGallery();
+                    batch = [];
+                } else if (firstPaintDone && batch.length >= 50) {
+                    appState.images.push(...batch);
+                    renderGallery();
                     batch = [];
                 }
                 
                 cursor.continue();
             } else {
-                // 处理剩余数据
                 if (batch.length > 0) {
                     appState.images.push(...batch);
                 }
+                if (!firstPaintDone) {
+                    firstPaintDone = true;
+                    hideLoadingState();
+                }
+                renderGallery();
                 resolve();
             }
         };
@@ -255,6 +271,19 @@ function initEventListeners() {
     document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelected);
     document.getElementById('downloadSelectedBtn').addEventListener('click', downloadSelected);
     document.getElementById('cancelSelectBtn').addEventListener('click', cancelSelectMode);
+    
+    // 完成状态筛选（全部 / 未完成 / 已完成）
+    const completionFilterEl = document.getElementById('completionFilter');
+    if (completionFilterEl) {
+        completionFilterEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.completion-filter-btn');
+            if (!btn || !btn.dataset.filter) return;
+            appState.completionFilter = btn.dataset.filter;
+            completionFilterEl.querySelectorAll('.completion-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderGallery();
+        });
+    }
     
     // 详情页
     document.getElementById('backBtn').addEventListener('click', goBackToGallery);
@@ -480,8 +509,10 @@ async function handleSubmit() {
                     keywords: keywords,
                     timestamp: Date.now()
                 };
-                
-                appState.images.push(imageData);
+                // 仅本地模式在此处加入图库，服务器模式等上传成功后再 push，避免重复
+                if (!appState.useServer) {
+                    appState.images.push(imageData);
+                }
                 successCount++;
             } catch (error) {
                 console.error(`处理文件 ${item.name} 时出错:`, error);
@@ -753,7 +784,11 @@ function handleSearch() {
     renderGallery();
 }
 
-// 渲染图库（优化版本 - 使用DocumentFragment批量插入）
+// 首屏先渲染的图片数量，其余分块渲染以缩短“出现时间”
+const RENDER_INITIAL_CHUNK = 48;
+const RENDER_CHUNK_SIZE = 60;
+
+// 渲染图库（首屏先出图，其余分块渲染）
 function renderGallery() {
     const galleryGrid = document.getElementById('galleryGrid');
     if (!galleryGrid) return;
@@ -762,47 +797,64 @@ function renderGallery() {
     const selectedTagsArray = Array.from(appState.selectedTags);
     
     let filteredImages = appState.images.filter(img => {
-        // 搜索过滤
         if (searchTerm) {
             const matchName = img.name.toLowerCase().includes(searchTerm);
             const matchKeywords = img.keywords?.some(k => k.toLowerCase().includes(searchTerm)) || false;
-            if (!matchName && !matchKeywords) {
-                return false;
-            }
+            if (!matchName && !matchKeywords) return false;
         }
-        
-        // 标签过滤（交集逻辑）
         if (selectedTagsArray.length > 0) {
             const imgTags = [...(img.tags || [])];
             const hasAllTags = selectedTagsArray.every(tag => imgTags.includes(tag));
-            if (!hasAllTags) {
-                return false;
-            }
+            if (!hasAllTags) return false;
         }
-        
+        const idStr = String(img.id);
+        const isCompleted = appState.completedImageIds.has(idStr);
+        if (appState.completionFilter === 'completed' && !isCompleted) return false;
+        if (appState.completionFilter === 'uncompleted' && isCompleted) return false;
         return true;
     });
     
-    // 使用DocumentFragment批量插入，减少重排
-    const fragment = document.createDocumentFragment();
+    galleryGrid.innerHTML = '';
     
     if (filteredImages.length === 0) {
         const emptyMsg = document.createElement('p');
         emptyMsg.style.cssText = 'grid-column: 1/-1; text-align: center; color: #999; padding: 40px;';
         emptyMsg.textContent = '暂无图片';
-        fragment.appendChild(emptyMsg);
+        galleryGrid.appendChild(emptyMsg);
+    } else if (filteredImages.length <= RENDER_INITIAL_CHUNK) {
+        const fragment = document.createDocumentFragment();
+        filteredImages.forEach(img => fragment.appendChild(createGalleryItem(img)));
+        galleryGrid.appendChild(fragment);
+        updateGalleryCount();
     } else {
-        filteredImages.forEach(img => {
-            const item = createGalleryItem(img);
-            fragment.appendChild(item);
-        });
+        // 先渲染首屏，再分块渲染其余，缩短“图片出现”的等待时间
+        const firstChunk = document.createDocumentFragment();
+        for (let i = 0; i < RENDER_INITIAL_CHUNK; i++) {
+            firstChunk.appendChild(createGalleryItem(filteredImages[i]));
+        }
+        galleryGrid.appendChild(firstChunk);
+        updateGalleryCount();
+        let index = RENDER_INITIAL_CHUNK;
+        function addNextChunk() {
+            if (index >= filteredImages.length) {
+                updateGalleryCount();
+                return;
+            }
+            const fragment = document.createDocumentFragment();
+            const end = Math.min(index + RENDER_CHUNK_SIZE, filteredImages.length);
+            for (let i = index; i < end; i++) {
+                fragment.appendChild(createGalleryItem(filteredImages[i]));
+            }
+            galleryGrid.appendChild(fragment);
+            index = end;
+            if (index < filteredImages.length) {
+                requestAnimationFrame(addNextChunk);
+            } else {
+                updateGalleryCount();
+            }
+        }
+        requestAnimationFrame(addNextChunk);
     }
-    
-    // 一次性更新DOM
-    galleryGrid.innerHTML = '';
-    galleryGrid.appendChild(fragment);
-    
-    updateGalleryCount();
 }
 
 // 当前用户是否可删除该图片（仅服务器模式有效）
@@ -819,11 +871,15 @@ function createGalleryItem(img) {
     item.className = 'gallery-item' + (appState.selectMode ? ' select-mode' : '');
     item.dataset.id = img.id;
     
-    const isSelected = appState.selectedImages.has(img.id);
-    const showCheckbox = !appState.selectMode || !appState.useServer || canDeleteImage(img);
+    const idStr = String(img.id);
+    const isSelected = appState.selectedImages.has(idStr);
+    // 选择模式下显示所有图片的选择框（用于下载/删除）
+    const showCheckbox = appState.selectMode;
+    const isCompleted = appState.completedImageIds.has(idStr);
     
     item.innerHTML = `
-        ${showCheckbox ? `<input type="checkbox" class="gallery-item-checkbox" ${isSelected ? 'checked' : ''} data-id="${img.id}">` : ''}
+        ${showCheckbox ? `<input type="checkbox" class="gallery-item-checkbox" ${isSelected ? 'checked' : ''} data-id="${idStr}">` : ''}
+        ${isCompleted ? '<span class="gallery-item-badge-completed">已完成</span>' : ''}
         <img src="${img.dataUrl}" alt="${img.name}" loading="lazy" decoding="async">
         <div class="gallery-item-info">
             <div class="gallery-item-title" title="${img.name}">${img.name}</div>
@@ -847,10 +903,11 @@ function createGalleryItem(img) {
     const checkbox = item.querySelector('.gallery-item-checkbox');
     if (checkbox) {
         checkbox.addEventListener('change', (e) => {
+            const imgIdStr = String(img.id);
             if (e.target.checked) {
-                appState.selectedImages.add(img.id);
+                appState.selectedImages.add(imgIdStr);
             } else {
-                appState.selectedImages.delete(img.id);
+                appState.selectedImages.delete(imgIdStr);
             }
             updateSelectionBar();
         });
@@ -1086,12 +1143,15 @@ function toggleSelectMode() {
     appState.selectMode = !appState.selectMode;
     appState.selectedImages.clear();
     
+    const selectionBar = document.getElementById('selectionBar');
     if (appState.selectMode) {
         document.getElementById('selectModeBtn').textContent = '取消选择';
-        document.getElementById('selectionBar').style.display = 'flex';
+        selectionBar.style.display = 'flex';
+        selectionBar.classList.add('selection-bar--floating');
     } else {
         document.getElementById('selectModeBtn').textContent = '选择';
-        document.getElementById('selectionBar').style.display = 'none';
+        selectionBar.style.display = 'none';
+        selectionBar.classList.remove('selection-bar--floating');
     }
     
     renderGallery();
@@ -1103,7 +1163,9 @@ function cancelSelectMode() {
     appState.selectMode = false;
     appState.selectedImages.clear();
     document.getElementById('selectModeBtn').textContent = '选择';
-    document.getElementById('selectionBar').style.display = 'none';
+    const selectionBar = document.getElementById('selectionBar');
+    selectionBar.style.display = 'none';
+    selectionBar.classList.remove('selection-bar--floating');
     renderGallery();
     updateSelectionBar();
 }
@@ -1133,8 +1195,8 @@ async function deleteSelected() {
                 await deleteImages(idsToDelete);
             }
             
-            // 从内存中移除
-            appState.images = appState.images.filter(img => !appState.selectedImages.has(img.id));
+            // 从内存中移除（统一转为字符串比较，避免类型不一致）
+            appState.images = appState.images.filter(img => !appState.selectedImages.has(String(img.id)));
             await saveData();
             cancelSelectMode();
             renderGallery();
@@ -1153,12 +1215,14 @@ function downloadSelected() {
     }
     
     appState.selectedImages.forEach(id => {
-        const img = appState.images.find(i => i.id === id);
-        if (img) {
+        const img = appState.images.find(i => String(i.id) === String(id));
+        if (img && img.dataUrl) {
             const a = document.createElement('a');
             a.href = img.dataUrl;
-            a.download = img.name;
+            a.download = img.name || 'image';
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
         }
     });
     
@@ -1210,6 +1274,9 @@ function showGalleryPage() {
     // 隐藏详情页
     document.getElementById('detailPage').style.display = 'none';
     
+    // 刷新图库（确保勾选「已完成」后角标立即更新）
+    renderGallery();
+    
     // 恢复滚动位置
     if (appState.scrollPosition > 0) {
         setTimeout(() => {
@@ -1217,7 +1284,7 @@ function showGalleryPage() {
         }, 100);
     }
     
-    // 移除鼠标滚轮事件
+    // 移除鼠标滚轮和拖拽事件
     removeDetailImageZoom();
 }
 
@@ -1242,9 +1309,10 @@ function loadDetailPageData(img) {
         const height = detailImage.naturalHeight;
         detailDimensions.textContent = `${width} × ${height}`;
         
-        // 重置缩放
+        // 重置缩放和平移
         appState.detailImageZoom = 100;
-        detailImage.style.transform = 'scale(1)';
+        appState.detailImagePan = { x: 0, y: 0 };
+        detailImage.style.transform = 'scale(1) translate(0px, 0px)';
         
         // 确保图片适应容器（自动适应屏幕）
         const container = document.getElementById('detailImageContainer');
@@ -1286,20 +1354,55 @@ function loadDetailPageData(img) {
     const sizeInBytes = (base64Length * 3) / 4;
     const sizeInKB = (sizeInBytes / 1024).toFixed(2);
     detailSize.textContent = `${sizeInKB} KB`;
+    
+    // 完成状态勾选（先更新本地状态再请求，失败则回滚）
+    const checkbox = document.getElementById('detailCompletedCheckbox');
+    if (checkbox) {
+        const idStr = String(img.id);
+        checkbox.checked = appState.completedImageIds.has(idStr);
+        checkbox.onchange = null;
+        checkbox.onchange = async () => {
+            const completed = checkbox.checked;
+            const prevHas = appState.completedImageIds.has(idStr);
+            if (completed) appState.completedImageIds.add(idStr);
+            else appState.completedImageIds.delete(idStr);
+            try {
+                if (appState.useServer) {
+                    await setImageCompleted(idStr, completed);
+                } else {
+                    await saveCompletedIds(Array.from(appState.completedImageIds));
+                }
+            } catch (e) {
+                console.error('完成状态保存失败:', e);
+                if (prevHas) appState.completedImageIds.add(idStr);
+                else appState.completedImageIds.delete(idStr);
+                checkbox.checked = !completed;
+                alert('保存失败，请稍后重试。\n' + (e && e.message ? e.message : ''));
+            }
+        };
+    }
 }
 
-// 设置详情页图片缩放
+// 设置详情页图片缩放和拖动
 function setupDetailImageZoom() {
-    const detailImage = document.getElementById('detailImage');
     const detailImageContainer = document.getElementById('detailImageContainer');
     
     // 鼠标滚轮缩放
     detailImageContainer.addEventListener('wheel', handleDetailImageWheel, { passive: false });
+    // 拖动浏览
+    detailImageContainer.addEventListener('mousedown', handleDetailImageMouseDown);
+    detailImageContainer.addEventListener('mousemove', handleDetailImageMouseMove);
+    detailImageContainer.addEventListener('mouseup', handleDetailImageMouseUp);
+    detailImageContainer.addEventListener('mouseleave', handleDetailImageMouseUp);
 }
 
 function removeDetailImageZoom() {
     const detailImageContainer = document.getElementById('detailImageContainer');
     detailImageContainer.removeEventListener('wheel', handleDetailImageWheel);
+    detailImageContainer.removeEventListener('mousedown', handleDetailImageMouseDown);
+    detailImageContainer.removeEventListener('mousemove', handleDetailImageMouseMove);
+    detailImageContainer.removeEventListener('mouseup', handleDetailImageMouseUp);
+    detailImageContainer.removeEventListener('mouseleave', handleDetailImageMouseUp);
 }
 
 function handleDetailImageWheel(e) {
@@ -1309,6 +1412,36 @@ function handleDetailImageWheel(e) {
     const delta = e.deltaY > 0 ? -10 : 10;
     
     appState.detailImageZoom = Math.max(25, Math.min(500, appState.detailImageZoom + delta));
-    detailImage.style.transform = `scale(${appState.detailImageZoom / 100})`;
-    detailImage.style.transition = 'transform 0.1s';
+    applyDetailImageTransform(detailImage);
+}
+
+function handleDetailImageMouseDown(e) {
+    if (e.button !== 0) return; // 只响应左键
+    e.preventDefault();
+    appState.detailImageDragging = true;
+    appState.detailImageDragStart = { x: e.clientX - appState.detailImagePan.x, y: e.clientY - appState.detailImagePan.y };
+    document.getElementById('detailImageContainer').style.cursor = 'grabbing';
+}
+
+function handleDetailImageMouseMove(e) {
+    if (!appState.detailImageDragging) return;
+    e.preventDefault();
+    appState.detailImagePan.x = e.clientX - appState.detailImageDragStart.x;
+    appState.detailImagePan.y = e.clientY - appState.detailImageDragStart.y;
+    applyDetailImageTransform(document.getElementById('detailImage'));
+}
+
+function handleDetailImageMouseUp(e) {
+    if (appState.detailImageDragging) {
+        appState.detailImageDragging = false;
+        document.getElementById('detailImageContainer').style.cursor = 'grab';
+    }
+}
+
+function applyDetailImageTransform(img) {
+    const scale = appState.detailImageZoom / 100;
+    const tx = appState.detailImagePan.x;
+    const ty = appState.detailImagePan.y;
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    img.style.transition = 'none';
 }

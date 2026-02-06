@@ -500,6 +500,35 @@ body::before {
     color: #555;
 }
 
+/* 完成状态筛选：全部 / 未完成 / 已完成 */
+.completion-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+}
+
+.completion-filter-btn {
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #333;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.completion-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.completion-filter-btn.active {
+    background: rgba(76, 175, 80, 0.6);
+    color: white;
+    border-color: rgba(76, 175, 80, 0.8);
+}
+
 .gallery-header-actions {
     display: flex;
     align-items: center;
@@ -637,6 +666,20 @@ body::before {
     display: block;
 }
 
+.gallery-item-badge-completed {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    background: rgba(76, 175, 80, 0.95);
+    color: white;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: bold;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
 .gallery-item-info {
     padding: 10px;
 }
@@ -681,16 +724,28 @@ body::before {
     display: block;
 }
 
-.selection-bar {
-    position: static;
-    margin-top: 20px;
+/* “删除”“下载”操作区：默认占位，选择模式下用浮动样式 */
+.selection-bar,
+.gallery-section .selection-bar {
+    margin: 20px auto;
+    max-width: 420px;
     background: white;
     padding: 12px 16px;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
     gap: 12px;
+}
+
+/* 选择模式：粘性定位，滚动时保持在视口顶部可见 */
+.selection-bar.selection-bar--floating {
+    position: sticky;
+    top: 16px;
+    margin: 20px auto;
+    z-index: 100;
 }
 
 .selected-count {
@@ -1015,8 +1070,10 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: auto;
+    overflow: hidden;
     max-height: calc(100vh - 200px);
+    cursor: grab;
+    user-select: none;
 }
 
 .detail-image-container img {
@@ -1027,8 +1084,8 @@ body::before {
     object-fit: contain;
     border-radius: 10px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    transition: transform 0.1s;
     transform-origin: center center;
+    pointer-events: none;
 }
 
 .detail-info-section {
@@ -1094,6 +1151,23 @@ body::before {
     border-radius: 15px;
     font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.detail-completed-item .detail-completed-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: white;
+    font-size: 15px;
+    font-weight: normal;
+    margin-bottom: 0;
+}
+
+.detail-completed-item .detail-completed-wrap input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
 }
 
 /* 响应式设计 */

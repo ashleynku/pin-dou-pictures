@@ -84,6 +84,11 @@
                 <div class="gallery-header-left">
                     <h2>图库</h2>
                     <span class="gallery-count" id="galleryCount">共 0 张</span>
+                    <div class="completion-filter" id="completionFilter">
+                        <button type="button" class="completion-filter-btn active" data-filter="all">全部</button>
+                        <button type="button" class="completion-filter-btn" data-filter="uncompleted">未完成</button>
+                        <button type="button" class="completion-filter-btn" data-filter="completed">已完成</button>
+                    </div>
                 </div>
                 <div class="gallery-header-actions">
                     <button type="button" class="creator-login-btn" id="creatorSettingsBtn" style="display: none;">创作者登录</button>
@@ -92,14 +97,14 @@
                     <button class="select-mode-btn" id="selectModeBtn">选择</button>
                 </div>
             </div>
-            <div class="gallery-grid" id="galleryGrid">
-                <!-- 图片将动态生成 -->
-            </div>
             <div class="selection-bar" id="selectionBar" style="display: none;">
                 <span class="selected-count" id="selectedCount">已选择 0 项</span>
                 <button class="action-btn delete-btn" id="deleteSelectedBtn">删除</button>
                 <button class="action-btn download-btn" id="downloadSelectedBtn">下载到本地</button>
                 <button class="action-btn cancel-btn" id="cancelSelectBtn">取消</button>
+            </div>
+            <div class="gallery-grid" id="galleryGrid">
+                <!-- 图片将动态生成 -->
             </div>
         </section>
     </div>
@@ -172,6 +177,12 @@
                         <div class="detail-info-item">
                             <label>文件大小：</label>
                             <span id="detailSize"></span>
+                        </div>
+                        <div class="detail-info-item detail-completed-item">
+                            <label>完成状态：</label>
+                            <label class="detail-completed-wrap">
+                                <input type="checkbox" id="detailCompletedCheckbox"> 我已完成此作品
+                            </label>
                         </div>
                     </div>
                 </div>

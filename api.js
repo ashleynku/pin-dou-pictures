@@ -190,6 +190,39 @@ async function fetchTags() {
     }
 }
 
+// 获取当前访客的「已完成」图片 ID 列表
+async function fetchCompletedIds() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/me/completed`, {
+            headers: getAuthHeaders()
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        return Array.isArray(data.completedImageIds) ? data.completedImageIds : [];
+    } catch (e) {
+        console.error('获取完成状态失败:', e);
+        return [];
+    }
+}
+
+// 设置某张图片对当前访客的完成状态（打勾/取消）
+async function setImageCompleted(imageId, completed) {
+    const response = await fetch(`${API_BASE_URL}/api/images/${imageId}/complete`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ completed: !!completed })
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const msg = err.error || err.message || `HTTP ${response.status}`;
+        if (response.status === 404) {
+            throw new Error('接口未找到(404)，请确认已重启服务器并使用了最新 server.js');
+        }
+        throw new Error(msg);
+    }
+    return await response.json();
+}
+
 // 保存标签（仅创作者可成功）
 async function saveTags(tags) {
     try {
