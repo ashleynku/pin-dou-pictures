@@ -102,15 +102,20 @@ async function saveTags(tags) {
 // API路由
 
 // 获取所有图片（所有人可浏览，返回每条的上传者信息供前端判断是否可删）
+// 注意：不返回 dataUrl（base64），否则数据量过大导致前端加载超时
 app.get('/api/images', async (req, res) => {
     try {
         const images = await readImages();
         // 兼容旧数据：无 uploadedBy 的视为创作者上传
-        const list = images.map(img => ({
-            ...img,
-            uploadedBy: img.uploadedBy || 'creator',
-            visitorId: img.visitorId || null
-        }));
+        const list = images.map(img => {
+            // 去掉 dataUrl 字段，只返回 url（文件路径），大幅减小响应体积
+            const { dataUrl, ...rest } = img;
+            return {
+                ...rest,
+                uploadedBy: img.uploadedBy || 'creator',
+                visitorId: img.visitorId || null
+            };
+        });
         res.json(list);
     } catch (error) {
         res.status(500).json({ error: '获取图片失败' });
