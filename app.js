@@ -1064,7 +1064,7 @@ function convertToPixel() {
     const colorCountInput = document.getElementById('colorCountInput');
     const resolutionInput = document.getElementById('resolutionInput');
     const colorCount = Math.max(24, Math.min(256, parseInt(colorCountInput.value) || 24));
-    const maxSize = Math.max(20, Math.min(200, parseInt(resolutionInput.value) || 80));
+    const maxSize = Math.max(20, Math.min(500, parseInt(resolutionInput.value) || 80));
     const gridSize = 12; // 每个像素格子的显示尺寸（固定值，保证网格清晰）
     const img = new Image();
     img.onload = () => {
