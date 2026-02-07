@@ -574,13 +574,14 @@ async function handleSubmit() {
             
             renderGallery();
             
-            // 重置表单
+            // 重置表单，显示上传区域以便继续上传
             appState.previewFiles = [];
             document.getElementById('uploadPreview').innerHTML = '';
             document.getElementById('uploadForm').style.display = 'none';
             document.getElementById('tagsInput').value = '';
             document.getElementById('keywordsInput').value = '';
             document.getElementById('fileInput').value = '';
+            // 上传区保持可见，方便用户继续上传下一批
         } catch (saveError) {
             // 保存失败，回滚已添加的图片
             if (!appState.useServer) {
@@ -1092,6 +1093,7 @@ function uploadToGallery() {
                     appState.images.push(uploadedImage);
                     renderGallery();
                     alert('已上传至图库！');
+                    resetConvertArea();
                 }).catch(error => {
                     console.error('上传失败:', error);
                     alert('上传失败：' + error.message);
@@ -1102,6 +1104,7 @@ function uploadToGallery() {
                 saveData().then(() => {
                     renderGallery();
                     alert('已上传至图库！');
+                    resetConvertArea();
                 }).catch(error => {
                     console.error('保存失败:', error);
                     alert('保存失败：' + error.message);
@@ -1135,6 +1138,32 @@ function savePixelImage() {
         a.click();
         URL.revokeObjectURL(url);
     });
+}
+
+// 重置转换区域，方便继续转换下一张
+function resetConvertArea() {
+    appState.convertFile = null;
+    appState.convertConfirmed = false;
+    appState.currentImageForConvert = null;
+    
+    // 清空画布
+    const originalCanvas = document.getElementById('originalCanvas');
+    const pixelCanvas = document.getElementById('pixelCanvas');
+    const origCtx = originalCanvas.getContext('2d');
+    origCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+    originalCanvas.width = 0;
+    originalCanvas.height = 0;
+    const pixCtx = pixelCanvas.getContext('2d');
+    pixCtx.clearRect(0, 0, pixelCanvas.width, pixelCanvas.height);
+    pixelCanvas.width = 0;
+    pixelCanvas.height = 0;
+    
+    // 隐藏预览和按钮，显示上传区域
+    document.getElementById('convertPreview').style.display = 'none';
+    document.getElementById('convertActions').style.display = 'none';
+    document.getElementById('convertBtn').style.display = 'none';
+    document.getElementById('convertUploadArea').style.display = 'block';
+    document.getElementById('convertFileInput').value = '';
 }
 
 
