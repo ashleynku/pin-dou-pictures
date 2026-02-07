@@ -59,14 +59,25 @@
                     <p>拖拽图片到此处或点击选择</p>
                     <input type="file" id="convertFileInput" accept="image/*" style="display: none;">
                 </div>
-                <button class="convert-btn" id="convertBtn" style="display: none;">转为像素画</button>
+                <div class="convert-settings" id="convertSettings" style="display: none;">
+                    <div class="convert-settings-row">
+                        <label>颜色数量：<input type="number" id="colorCountInput" min="2" max="256" value="0" title="0 = 不限制颜色数量"><span class="convert-settings-hint">（0 = 不限制）</span></label>
+                        <label>像素大小：<input type="number" id="pixelSizeInput" min="10" max="50" value="32" title="像素越大越清晰"><span class="convert-settings-hint">（越大越清晰）</span></label>
+                    </div>
+                    <button class="convert-btn" id="convertBtn">转为像素画</button>
+                </div>
                 <div class="convert-preview" id="convertPreview" style="display: none;">
                     <div class="convert-original">
-                        <p>原图</p>
+                        <div class="convert-panel-header">
+                            <p>原图</p>
+                            <button class="convert-change-btn" id="convertChangeBtn" title="换一张图片">📷</button>
+                        </div>
                         <canvas id="originalCanvas"></canvas>
                     </div>
                     <div class="convert-pixel">
-                        <p>像素图</p>
+                        <div class="convert-panel-header">
+                            <p>像素图</p>
+                        </div>
                         <canvas id="pixelCanvas"></canvas>
                         <div class="convert-actions" id="convertActions" style="display: none;">
                             <button class="confirm-convert-btn" id="confirmConvertBtn">确认无误</button>

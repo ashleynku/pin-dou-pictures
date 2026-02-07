@@ -256,6 +256,7 @@ function initEventListeners() {
     document.getElementById('confirmConvertBtn').addEventListener('click', confirmConvert);
     document.getElementById('savePixelBtn').addEventListener('click', savePixelImage);
     document.getElementById('uploadToGalleryBtn').addEventListener('click', uploadToGallery);
+    document.getElementById('convertChangeBtn').addEventListener('click', handleConvertChange);
     
     // 右键保存像素图
     const pixelCanvas = document.getElementById('pixelCanvas');
@@ -968,12 +969,17 @@ function handleConvertFile(file) {
             const ctx = originalCanvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
             
-            // 显示转换预览区域和按钮
+            // 显示设置面板和预览区域，隐藏上传区域
+            document.getElementById('convertSettings').style.display = 'block';
             document.getElementById('convertPreview').style.display = 'grid';
-            document.getElementById('convertBtn').style.display = 'block';
             document.getElementById('convertUploadArea').style.display = 'none';
             
-            // 重置确认状态
+            // 重置像素图画布和确认状态
+            const pixelCanvas = document.getElementById('pixelCanvas');
+            const pixCtx = pixelCanvas.getContext('2d');
+            pixCtx.clearRect(0, 0, pixelCanvas.width, pixelCanvas.height);
+            pixelCanvas.width = 0;
+            pixelCanvas.height = 0;
             appState.convertConfirmed = false;
             document.getElementById('convertActions').style.display = 'none';
         };
@@ -982,7 +988,72 @@ function handleConvertFile(file) {
     reader.readAsDataURL(file);
 }
 
-// 转换为像素画
+// 换图按钮：触发文件选择
+function handleConvertChange() {
+    document.getElementById('convertFileInput').click();
+}
+
+// ===== 中位切分颜色量化算法（Median Cut） =====
+function medianCutQuantize(pixels, colorCount) {
+    if (colorCount <= 0 || colorCount >= 256) return null; // 不限制
+
+    // 收集所有不透明像素的颜色
+    const colors = [];
+    for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i + 3] > 128) {
+            colors.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+        }
+    }
+    if (colors.length === 0) return null;
+
+    // 递归切分颜色空间
+    function splitBucket(bucket, depth) {
+        if (depth === 0 || bucket.length === 0) return [bucket];
+
+        // 找出 R/G/B 范围最大的通道
+        let minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0;
+        for (const c of bucket) {
+            if (c[0] < minR) minR = c[0]; if (c[0] > maxR) maxR = c[0];
+            if (c[1] < minG) minG = c[1]; if (c[1] > maxG) maxG = c[1];
+            if (c[2] < minB) minB = c[2]; if (c[2] > maxB) maxB = c[2];
+        }
+        const rangeR = maxR - minR, rangeG = maxG - minG, rangeB = maxB - minB;
+        const channel = rangeR >= rangeG && rangeR >= rangeB ? 0 : (rangeG >= rangeB ? 1 : 2);
+
+        bucket.sort((a, b) => a[channel] - b[channel]);
+        const mid = Math.floor(bucket.length / 2);
+        return [
+            ...splitBucket(bucket.slice(0, mid), depth - 1),
+            ...splitBucket(bucket.slice(mid), depth - 1)
+        ];
+    }
+
+    const depth = Math.ceil(Math.log2(colorCount));
+    const buckets = splitBucket(colors, depth).slice(0, colorCount);
+
+    // 每个桶取平均色作为调色板
+    const palette = buckets.filter(b => b.length > 0).map(bucket => {
+        let r = 0, g = 0, b = 0;
+        for (const c of bucket) { r += c[0]; g += c[1]; b += c[2]; }
+        const n = bucket.length;
+        return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+    });
+
+    return palette;
+}
+
+// 找到调色板中最近的颜色
+function findClosestColor(r, g, b, palette) {
+    let minDist = Infinity, closest = palette[0];
+    for (const c of palette) {
+        const dr = r - c[0], dg = g - c[1], db = b - c[2];
+        const dist = dr * dr + dg * dg + db * db;
+        if (dist < minDist) { minDist = dist; closest = c; }
+    }
+    return closest;
+}
+
+// 转换为像素画（支持颜色量化 + 更大像素块更清晰）
 function convertToPixel() {
     if (!appState.convertFile) {
         alert('请先上传一张图片');
@@ -990,51 +1061,94 @@ function convertToPixel() {
     }
     
     const pixelCanvas = document.getElementById('pixelCanvas');
+    const colorCountInput = document.getElementById('colorCountInput');
+    const pixelSizeInput = document.getElementById('pixelSizeInput');
+    const colorCount = parseInt(colorCountInput.value) || 0;
+    const gridSize = Math.max(10, Math.min(50, parseInt(pixelSizeInput.value) || 32));
     
-    const maxSize = 50;
+    const maxSize = 50; // 最大像素画尺寸
     const img = new Image();
     img.onload = () => {
         // 计算缩放比例
         const scale = Math.min(maxSize / img.width, maxSize / img.height);
-        const pixelWidth = Math.floor(img.width * scale);
-        const pixelHeight = Math.floor(img.height * scale);
+        const pixelWidth = Math.max(1, Math.floor(img.width * scale));
+        const pixelHeight = Math.max(1, Math.floor(img.height * scale));
         
-        // 设置画布尺寸（包含网格线）
-        const gridSize = 10; // 每个像素的显示大小
+        // 设置画布尺寸
         pixelCanvas.width = pixelWidth * gridSize;
         pixelCanvas.height = pixelHeight * gridSize;
-        
         const ctx = pixelCanvas.getContext('2d');
         
-        // 创建临时画布进行像素化
+        // 使用高质量缩放采样：先缩放到 2 倍大小再缩到目标，减少锯齿
+        const sampleScale = 4; // 超采样倍率
+        const sampleW = pixelWidth * sampleScale;
+        const sampleH = pixelHeight * sampleScale;
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = pixelWidth;
-        tempCanvas.height = pixelHeight;
+        tempCanvas.width = sampleW;
+        tempCanvas.height = sampleH;
         const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.imageSmoothingEnabled = true;
+        tempCtx.imageSmoothingQuality = 'high';
+        tempCtx.drawImage(img, 0, 0, sampleW, sampleH);
         
-        // 绘制缩小的图像
-        tempCtx.drawImage(img, 0, 0, pixelWidth, pixelHeight);
-        
-        // 获取像素数据并绘制到目标画布（带网格）
-        const imageData = tempCtx.getImageData(0, 0, pixelWidth, pixelHeight);
-        const data = imageData.data;
+        // 对每个像素块在超采样区域取平均色
+        const sampleData = tempCtx.getImageData(0, 0, sampleW, sampleH).data;
+        const pixelColors = [];
         
         for (let y = 0; y < pixelHeight; y++) {
             for (let x = 0; x < pixelWidth; x++) {
-                const idx = (y * pixelWidth + x) * 4;
-                const r = data[idx];
-                const g = data[idx + 1];
-                const b = data[idx + 2];
-                const a = data[idx + 3];
+                let rSum = 0, gSum = 0, bSum = 0, aSum = 0, count = 0;
+                for (let sy = y * sampleScale; sy < (y + 1) * sampleScale; sy++) {
+                    for (let sx = x * sampleScale; sx < (x + 1) * sampleScale; sx++) {
+                        const idx = (sy * sampleW + sx) * 4;
+                        rSum += sampleData[idx];
+                        gSum += sampleData[idx + 1];
+                        bSum += sampleData[idx + 2];
+                        aSum += sampleData[idx + 3];
+                        count++;
+                    }
+                }
+                pixelColors.push({
+                    r: Math.round(rSum / count),
+                    g: Math.round(gSum / count),
+                    b: Math.round(bSum / count),
+                    a: Math.round(aSum / count)
+                });
+            }
+        }
+        
+        // 颜色量化（如果设置了颜色数量）
+        let palette = null;
+        if (colorCount >= 2 && colorCount < 256) {
+            const flatPixels = new Uint8ClampedArray(pixelColors.length * 4);
+            pixelColors.forEach((c, i) => {
+                flatPixels[i * 4] = c.r;
+                flatPixels[i * 4 + 1] = c.g;
+                flatPixels[i * 4 + 2] = c.b;
+                flatPixels[i * 4 + 3] = c.a;
+            });
+            palette = medianCutQuantize(flatPixels, colorCount);
+        }
+        
+        // 绘制像素画
+        for (let y = 0; y < pixelHeight; y++) {
+            for (let x = 0; x < pixelWidth; x++) {
+                const c = pixelColors[y * pixelWidth + x];
+                let r = c.r, g = c.g, b = c.b;
+                
+                if (palette) {
+                    const closest = findClosestColor(r, g, b, palette);
+                    r = closest[0]; g = closest[1]; b = closest[2];
+                }
                 
                 // 绘制像素块
-                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${c.a / 255})`;
                 ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
                 
                 // 绘制网格线
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x * gridSize, y * gridSize, gridSize, gridSize);
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(x * gridSize + 0.25, y * gridSize + 0.25, gridSize - 0.5, gridSize - 0.5);
             }
         }
         
@@ -1158,10 +1272,10 @@ function resetConvertArea() {
     pixelCanvas.width = 0;
     pixelCanvas.height = 0;
     
-    // 隐藏预览和按钮，显示上传区域
+    // 隐藏预览、设置面板和按钮，显示上传区域
     document.getElementById('convertPreview').style.display = 'none';
     document.getElementById('convertActions').style.display = 'none';
-    document.getElementById('convertBtn').style.display = 'none';
+    document.getElementById('convertSettings').style.display = 'none';
     document.getElementById('convertUploadArea').style.display = 'block';
     document.getElementById('convertFileInput').value = '';
 }

@@ -395,6 +395,92 @@ body::before {
     text-align: center;
 }
 
+.convert-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.convert-panel-header p {
+    margin: 0;
+    font-weight: bold;
+    color: #555;
+}
+
+.convert-change-btn {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border: 2px solid #667eea;
+    border-radius: 50%;
+    background: white;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    padding: 0;
+}
+
+.convert-change-btn:hover {
+    background: #667eea;
+    transform: translateY(-50%) scale(1.1);
+    box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
+}
+
+.convert-settings {
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 10px;
+    padding: 15px 20px;
+    margin-bottom: 15px;
+    border: 1px solid #e0e0e0;
+}
+
+.convert-settings-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.convert-settings-row label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: #444;
+    font-weight: 500;
+}
+
+.convert-settings-row input[type="number"] {
+    width: 65px;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: center;
+}
+
+.convert-settings-row input[type="number"]:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.convert-settings-hint {
+    font-size: 12px;
+    color: #999;
+}
+
 .convert-original p, .convert-pixel p {
     margin-bottom: 10px;
     font-weight: bold;
