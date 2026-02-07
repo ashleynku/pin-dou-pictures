@@ -880,7 +880,7 @@ function createGalleryItem(img) {
     item.innerHTML = `
         ${showCheckbox ? `<input type="checkbox" class="gallery-item-checkbox" ${isSelected ? 'checked' : ''} data-id="${idStr}">` : ''}
         ${isCompleted ? '<span class="gallery-item-badge-completed">已完成</span>' : ''}
-        <img src="${img.dataUrl}" alt="${img.name}" loading="lazy" decoding="async">
+        <img src="${img.thumbnailUrl || img.dataUrl}" alt="${img.name}" loading="lazy" decoding="async">
         <div class="gallery-item-info">
             <div class="gallery-item-title" title="${img.name}">${img.name}</div>
             ${img.tags && img.tags.length > 0 ? `

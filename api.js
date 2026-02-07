@@ -91,15 +91,14 @@ async function fetchAllImages() {
         if (!response.ok) throw new Error('获取图片失败');
         const images = await response.json();
         
-        // 将服务器URL转换为完整的dataUrl（用于兼容）
+        // 将服务器相对路径转换为完整 URL
         return images.map(img => {
-            // 如果已有dataUrl，直接使用；否则从URL加载
-            if (img.dataUrl) {
-                return img;
-            }
+            const fullUrl = img.url && !img.url.startsWith('http') ? `${API_BASE_URL}${img.url}` : img.url;
+            const fullThumbUrl = img.thumbnailUrl && !img.thumbnailUrl.startsWith('http') ? `${API_BASE_URL}${img.thumbnailUrl}` : img.thumbnailUrl;
             return {
                 ...img,
-                dataUrl: img.url.startsWith('http') ? img.url : `${API_BASE_URL}${img.url}`
+                dataUrl: img.dataUrl || fullUrl,
+                thumbnailUrl: fullThumbUrl || fullUrl || img.dataUrl
             };
         });
     } catch (error) {
@@ -129,9 +128,12 @@ async function uploadImage(imageData) {
         }
         
         const result = await response.json();
+        const fullUrl = result.url && !result.url.startsWith('http') ? `${API_BASE_URL}${result.url}` : result.url;
+        const fullThumbUrl = result.thumbnailUrl && !result.thumbnailUrl.startsWith('http') ? `${API_BASE_URL}${result.thumbnailUrl}` : result.thumbnailUrl;
         return {
             ...result,
-            dataUrl: result.url.startsWith('http') ? result.url : `${API_BASE_URL}${result.url}`
+            dataUrl: result.dataUrl || fullUrl,
+            thumbnailUrl: fullThumbUrl || fullUrl
         };
     } catch (error) {
         console.error('上传图片失败:', error);
