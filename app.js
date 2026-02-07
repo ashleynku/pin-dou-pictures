@@ -995,7 +995,7 @@ function handleConvertChange() {
 
 // ===== 中位切分颜色量化算法（Median Cut） =====
 function medianCutQuantize(pixels, colorCount) {
-    if (colorCount <= 0 || colorCount >= 256) return null; // 不限制
+    if (colorCount <= 0) return null; // 不限制
 
     // 收集所有不透明像素的颜色
     const colors = [];
@@ -1063,8 +1063,8 @@ function convertToPixel() {
     const pixelCanvas = document.getElementById('pixelCanvas');
     const colorCountInput = document.getElementById('colorCountInput');
     const pixelSizeInput = document.getElementById('pixelSizeInput');
-    const colorCount = parseInt(colorCountInput.value) || 0;
-    const gridSize = Math.max(10, Math.min(50, parseInt(pixelSizeInput.value) || 32));
+    const colorCount = Math.max(24, Math.min(256, parseInt(colorCountInput.value) || 24));
+    const gridSize = Math.max(10, Math.min(208, parseInt(pixelSizeInput.value) || 208));
     
     const maxSize = 50; // 最大像素画尺寸
     const img = new Image();
@@ -1117,9 +1117,9 @@ function convertToPixel() {
             }
         }
         
-        // 颜色量化（如果设置了颜色数量）
+        // 颜色量化（始终启用，最少24色）
         let palette = null;
-        if (colorCount >= 2 && colorCount < 256) {
+        if (colorCount >= 24 && colorCount <= 256) {
             const flatPixels = new Uint8ClampedArray(pixelColors.length * 4);
             pixelColors.forEach((c, i) => {
                 flatPixels[i * 4] = c.r;
